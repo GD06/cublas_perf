@@ -44,16 +44,17 @@ int main(int argc, char** argv) {
     size_t K = atoi(argv[3]);
     size_t loop_iters = atoi(argv[4]);
 
-    CUDA_CHECK(cudaSetDevice(3));
+    CUDA_CHECK(cudaSetDevice(7));
 
     float *dev_a, *dev_b, *dev_c;
     CUDA_CHECK(cudaMalloc((void**)&dev_a, sizeof(float) * M * K));
     CUDA_CHECK(cudaMalloc((void**)&dev_b, sizeof(float) * K * N));
     CUDA_CHECK(cudaMalloc((void**)&dev_c, sizeof(float) * M * N));
 
-    float *host_a, *host_b;
+    float *host_a, *host_b, *host_c;
     host_a = (float*)malloc(sizeof(float) * M * K);
     host_b = (float*)malloc(sizeof(float) * K * N);
+    host_c = (float*)malloc(sizeof(float) * M * N);
 
     DataInit(host_a, M * K);
     DataInit(host_b, K * N);
@@ -72,6 +73,7 @@ int main(int argc, char** argv) {
     struct timeval start, stop;
 
     for (size_t i = 0; i < loop_iters; ++i) {
+
         gettimeofday(&start, NULL);
         CUBLAS_CHECK(cublasSgemm(handler,
                 CUBLAS_OP_N, CUBLAS_OP_N,
@@ -80,14 +82,30 @@ int main(int argc, char** argv) {
                 dev_b, N,
                 &beta,
                 dev_c, N));
+        CUDA_CHECK(cudaDeviceSynchronize());
+        gettimeofday(&stop, NULL);
+
+    }
+
+    for (size_t i = 0; i < loop_iters; ++i) {
+
+        gettimeofday(&start, NULL);
+        CUBLAS_CHECK(cublasSgemm(handler,
+                CUBLAS_OP_N, CUBLAS_OP_N,
+                M, N, K,
+                &alpha, dev_a, K,
+                dev_b, N,
+                &beta,
+                dev_c, N));
+        CUDA_CHECK(cudaDeviceSynchronize());
         gettimeofday(&stop, NULL);
 
         double elapsed_time, gflops;
         elapsed_time = (stop.tv_sec - start.tv_sec) +
             (double(stop.tv_usec - start.tv_usec) / 1e6);
-        gflops = (2.0 * double(M) * double(N) * double(K)) / elapsed_time;
+        gflops = (2.0 * double(M) * double(N) * double(K) * 1e-9) / elapsed_time;
 
-        printf("%zu, %zu, %zu, %.5f, %.5f\n", M, N, K, elapsed_time, gflops);
+        printf("%zu, %zu, %zu, %.7f, %.7f\n", M, N, K, elapsed_time, gflops);
     }
 
     free(host_a);
